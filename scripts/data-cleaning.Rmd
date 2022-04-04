@@ -1,0 +1,33 @@
+---
+title: "data-cleaning"
+output: html_document
+date: '2022-04-04'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#### Workspace setup ####
+library(knitr)
+library(janitor)
+library(lubridate)
+library(opendatatoronto)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+```
+
+#### Data download ####
+```{r}
+package <- show_package("e271cdae-8788-4980-96ce-6a5c95bc6618")
+package
+```
+```{r}
+package <- list_package_resources("https://open.toronto.ca/dataset/ttc-bus-delay-data/") 
+
+
+get_resource('97b66e92-3587-4436-bd2b-bf12bc0cf683')
+```
+
