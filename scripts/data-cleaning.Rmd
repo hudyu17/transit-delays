@@ -6,28 +6,132 @@ date: '2022-04-04'
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
 
-```{r}
-#### Workspace setup ####
-library(knitr)
-library(janitor)
-library(lubridate)
-library(opendatatoronto)
 library(tidyverse)
-library(tidyr)
-library(dplyr)
-```
-
-#### Data download ####
-```{r}
-package <- show_package("e271cdae-8788-4980-96ce-6a5c95bc6618")
-package
+library(data.table)
+library(lubridate)
+library(openxlsx)
+library(readxl)
+library(data.table)
+library(janitor)
 ```
 ```{r}
-package <- list_package_resources("https://open.toronto.ca/dataset/ttc-bus-delay-data/") 
+# clean 2019 april file specifically - extra field
+# april2019 <- data.table(read_excel("../inputs/data/bus/ttc-bus-delay-data-2019.xlsx", 4))
+# 
+# april2019[, `Incident ID`:= NULL]
+# head(april2019)
+# write.xlsx(april2019, "../inputs/data/bus/ttc-bus-delay-data-2019-updated.xlsx", overwrite = TRUE, sheetName = 'Apr 2019')
+# year2019 <- data.table(read_excel("../inputs/data/bus/ttc-bus-delay-data-2019.xlsx", 4))
+
+# get all files in bus directory
+file_list <- list.files("../inputs/data/bus")
+# for each file in dir:
+#   for each sheet in file:
+#     append to df list
+#   merge all months in list to single df
+# merge years if you want
+df_list <- list()
+
+# for each file = for each year
+for (i in 1:length(file_list)) {
+  filename <- sprintf("../inputs/data/bus/%s", file_list[i])
+  sheetnames <- getSheetNames(filename)
+  sub_df_list <- list()
+  
+  # for each sheet = for each month
+  for (j in 1:length(sheetnames)) {
+    # if (sheetnames[i] == 'Apr 2019' && file_list[i] == 'ttc-bus-delay-data-2019.xlsx') {
+    #   df <- data.table(read_excel(filename, j))
+    #   df[, `Incident ID`:= NULL]
+    # }
+    df <- data.table(read_excel(filename, j))
+    # df[, `Report Date` := as.Date(`Report Date`)]
+    df[, Time := format(Time, format = "%H:%M:%S")]
+    df <- clean_names(df)
+    sub_df_list[[j]] <- df
+  }
+  
+  df_year <- rbindlist(sub_df_list, fill = TRUE)
+  
+  df_list[[i]] <- df_year
+}
+# 
+# filename <- "../inputs/data/bus/ttc-bus-delay-data-2014.xlsx"
+# sheetnames <- getSheetNames(filename)
+# for(i in 1:length(sheetnames)) {
+#   print(sheetnames[i])
+#   df <- read(excel)
+# }
+# bus_2014 <- read_excel("../inputs/data/bus/ttc-bus-delay-data-2014.xlsx", 1)
+# 
+# df <- data.table(bus_2014)
+# head(df)
+```
+
+#### Checking NAs
+```{r}
+na_list <- list()
+
+for (i in 1:length(df_list)) {
+  na_rows <- sum(!complete.cases(df_list[[i]]))
+  all_rows <- count(df_list[[i]])
+  na_list[i] <- na_rows / all_rows
+}
+
+na_list
+```
+
+```{r}
+# 15-20% rows have NAs; check their distributions before dropping
+df_2014 <- df_list[[1]]
+
+df_2014
+
+df_2014_na <- df_2014[rowSums(is.na(df_2014)) > 0, ] 
+
+df_2014_na[rowSums(is.na(df_2014_na)) > 0, ] # 15k rows with a null value
+
+df_2014_na[, vehicle :=NULL]
+df_2014_na[, direction :=NULL]
+
+df_2014_na[rowSums(is.na(df_2014_na)) > 0, ] # 158 rows with null value
+
+df_2014_na[complete.cases(df_2014_na), mean(min_delay), by=incident][order(-V1)]
+df_2014[complete.cases(df_2014), mean(min_delay), by=incident][order(-V1)]
+
+df_2014[complete.cases(df_2014), mean(min_delay), by=day][order(-V1)]
+```
+```{r}
+for (i in 1:length(df_list)) {
+  year_df <- df_list[[i]][, route := as.character(route)]
+  p <- year_df[complete.cases(year_df), mean(min_delay), by=route][order(-V1)] %>%
+    ggplot(aes(x= reorder(route,-V1), y=V1)) + 
+    geom_bar(stat="identity") 
+  plot(p)
+}
+
+# looks like a few routes are delayed much more often - bad data or reality? explore
+```
 
 
-get_resource('97b66e92-3587-4436-bd2b-bf12bc0cf683')
+```{r}
+for (i in 1:length(df_list)) {
+  df <- df_list[[i]][,.SD, .SDcols = !c('vehicle', 'direction')]
+  print(df[complete.cases(df), mean(min_delay), by=day][order(-V1)])
+}
+```
+
+
+```{r}
+df_list[[1]][, month(`Report Date`)]
+
+df_list[[1]][, mean(`Min Delay`), by=list(Incident, month(`Report Date`))][order(-V1)]
+
+df_list[[1]][, mean(min_delay), by=incident]
+
+mean(df_list[[1]][incident=='Diversion', min_delay][1:10])
+
+df_list[[1]]
 ```
 

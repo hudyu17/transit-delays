@@ -1,0 +1,43 @@
+---
+title: "data-download"
+output: html_document
+date: '2022-04-04'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#### Workspace setup ####
+library(knitr)
+library(lubridate)
+library(opendatatoronto)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(openxlsx)
+```
+
+#### Bus data ####
+```{r}
+package <- list_package_resources("https://open.toronto.ca/dataset/ttc-bus-delay-data/") 
+
+package <- data.table(package)
+
+# ids <- package$id
+# package[2, ]
+# nrow(package)
+
+for(i in 2:nrow(package)) {
+  row <- package[i, ]
+  
+  df <- get_resource(row$id)
+  write.xlsx(df, sprintf("../inputs/data/bus/%s.xlsx", row$name))
+}
+
+# df_2014 <- get_resource('97b66e92-3587-4436-bd2b-bf12bc0cf683')
+# write.xlsx(df_2014, "../inputs/data/test-2014.xlsx")
+```
+
