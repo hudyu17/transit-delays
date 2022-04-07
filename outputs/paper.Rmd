@@ -1,0 +1,64 @@
+---
+title: "TTC delay times are not random"
+subtitle: "How long you wait depends on where you are, what route you take, and when you take it"
+author: 
+  - Hudson Yuen
+date: "`r format(Sys.time(), '%d %B %Y')`"
+abstract: "Despite ranking amongst North America’s best transit systems, the Toronto Transit Commission (TTC) is often derided for irritating delays and service interruptions. This report examines TTC bus, subway, and streetcar delay data, aiming to identify the factors influencing such delays and how improvements can be made. Certain incident types and days of service see disproportionately long delays, creating opportunities to address the most unpleasant aspects of the rider experience in a targeted manner. Doing so will not only strengthen the city’s ability to move people, but to also facilitate sustainable development. **Keywords:** public transit, transit efficiency, urban mobility, sustainble transportation, transportation equity"
+output:
+  bookdown::pdf_document2
+toc: TRUE
+thanks: "All data and scripts available at https://github.com/hudyu17/transit-delays"
+fig_caption: yes
+bibliography: references.bib
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(janitor)
+library(lubridate)
+library(opendatatoronto)
+library(tidyverse)
+library(tidyr)
+library(data.table)
+library(dplyr)
+# library(kableExtra)
+```
+\newpage
+
+# Introduction
+A strong transit system is critical to the vitality and sustainability of urban centres, yet the Toronto Transit Commission (TTC) is still seen as sub-par by many city residents [@citePoll]. A key driver of this dissatisfaction stems from chronic delays and service cancellations, creating unpleasant knock-on effects such as overcrowding. The TTC has been named North America’s transit system of the year as recently as 2017 [@citeAward], yet this may reflect more on state of public transportation on the subcontinent than the merits of Toronto’s network. 
+
+As the TTC breaks ground on ambitious projects like the Ontario Relief Line [@citeOL], there remains plenty of opportunity to improve how existing services are run. Understanding the causes behind the most severe transit delays can help address issues in a targeted manner, relieving stress throughout the system. While some delays are implemented by design, such as weekend diversions to facilitate larger construction operations, the TTC should seek to mitigate their negative effects.  
+
+The future competitiveness and environmental sustainability of Toronto is intrinsically tied to the strength of the TTC. An inadequate transit system will hamstring growth and opportunity, both on individual scales and beyond [@citeTransit]. Understanding where delays are the most severe can not only help address current limitations, but also aid prediction and prevention of future bottlenecks as projects like the Ontario Line begin construction through the downtown core. 
+
+The remainder of this paper is structured as follows: Section \@ref(data) covers the data source and analysis methodology employed. Section \@ref(model) contains the statistical models used to derive the findings in this paper, with section \@ref(results) covering the results. Section \@ref(discussion) then examines key dimensions of the data, proposing conclusions and areas of further exploration. 
+
+\newpage
+# Data
+
+## Data Source
+This report examines TTC delay data from 2014 to 2021 across bus, subway, and streetcar services. This data was obtained from 3 separate datasets provided to the public through the City of Toronto Open Data Portal...
+
+## Methodology and Data Collection
+`R` [@citeR] was the language and environment used for the bulk of this analysis
+
+## Data Processing
+
+## Data Characteristics
+
+\newpage
+# Model
+
+\newpage
+# Results
+
+\newpage
+# Discussion
+
+\newpage
+# Conclusions
+
+\newpage
+# References

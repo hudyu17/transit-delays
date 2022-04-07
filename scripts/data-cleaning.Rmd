@@ -12,7 +12,6 @@ library(data.table)
 library(lubridate)
 library(openxlsx)
 library(readxl)
-library(data.table)
 library(janitor)
 ```
 ```{r}
@@ -82,6 +81,23 @@ for (i in 1:length(df_list)) {
 na_list
 ```
 
+2018 NAs
+```{r}
+df_2019 <- copy(df_list[[6]])
+
+df_2019
+
+df_2019[, .N]
+
+df_2019[, c('incident_id', 'delay', 'gap', 'vehicle', 'direction', 'location', 'min_gap', 'incident') := NULL]
+sum(!complete.cases(df_2019))
+df_2019[complete.cases(df_2019), mean(min_delay), by=day][order(-V1)]
+
+df_2019[!complete.cases(df_2019)]
+
+```
+
+
 ```{r}
 # 15-20% rows have NAs; check their distributions before dropping
 df_2014 <- df_list[[1]]
@@ -103,15 +119,39 @@ df_2014[complete.cases(df_2014), mean(min_delay), by=incident][order(-V1)]
 df_2014[complete.cases(df_2014), mean(min_delay), by=day][order(-V1)]
 ```
 ```{r}
+# plot delay by route
 for (i in 1:length(df_list)) {
-  year_df <- df_list[[i]][, route := as.character(route)]
-  p <- year_df[complete.cases(year_df), mean(min_delay), by=route][order(-V1)] %>%
+  year_df <- copy(df_list[[i]])
+  year_df <- year_df[, route := as.character(route)]
+  year_df <- year_df[, c('route', 'min_delay')]
+  p <- year_df[complete.cases(year_df), mean(min_delay), by=route] %>%
     ggplot(aes(x= reorder(route,-V1), y=V1)) + 
     geom_bar(stat="identity") 
   plot(p)
 }
 
 # looks like a few routes are delayed much more often - bad data or reality? explore
+
+# plot delay by day
+for (i in 1:length(df_list)) {
+  year_df <- copy(df_list[[i]])
+  year_df <- year_df[, route := as.character(route)]
+  year_df <- year_df[, c('day', 'min_delay')]
+  p <- year_df[complete.cases(year_df), mean(min_delay), by=day] %>%
+    ggplot(aes(x= reorder(day,-V1), y=V1)) + 
+    geom_bar(stat="identity") 
+  plot(p)
+}
+
+# plot delay by incident
+for (i in 1:length(df_list)) {
+  year_df <- copy(df_list[[i]])
+  year_df <- year_df[, c('incident', 'min_delay')]
+  p <- year_df[complete.cases(year_df), mean(min_delay), by=incident] %>%
+    ggplot(aes(x= reorder(incident,-V1), y=V1)) + 
+    geom_bar(stat="identity") 
+  plot(p)
+}
 ```
 
 
@@ -123,6 +163,96 @@ for (i in 1:length(df_list)) {
 ```
 
 
+```{r}
+df_list[[1]]
+
+df_incident <- copy(df_list[[1]])
+df_incident[, week := week(report_date)]
+df_incident[
+    complete.cases(df_incident) 
+    & report_date != as.POSIXct("2014-03-01", tz="UTC") 
+    & incident != 'Diversion', 
+  mean(min_delay), by=list(week, incident)] %>%
+    ggplot(aes(x=week, y=V1, group=incident, color=incident)) +
+    geom_line()
+
+
+
+# typeof(df_diversion[3, 1][[1]])
+# df_diversion[3, 1][[1]]
+# 
+# timeframe <- c("2014-03-01")  
+# df_diversion[report_date != as.POSIXct("2014-03-01", tz="UTC")]
+# df_diversion[report_date == as.double.POSIXlt('2014-03-01')]
+```
+#### Binding all years together to see a delay trend
+```{r}
+df_all_years <- copy(rbindlist(df_list, fill = TRUE))
+
+head(df_all_years[complete.cases(df_all_years)])
+
+df_all_years[, month_year := format(as.Date(df_all_years$report_date), "%Y-%m")]
+df_all_years <- df_all_years[, c('month_year', 'min_delay', 'incident')]
+df_all_years[
+    complete.cases(df_all_years) & incident != 'Diversion', 
+    mean(min_delay), 
+    by=list(month_year, incident)] %>%
+    ggplot(aes(x=month_year, y=V1, group=incident, color=incident)) +
+    geom_line()
+
+# delay times are slightly increasing actually - this is surprising
+# segment growth by routes?
+```
+#### Saving to RData
+```{r}
+df_all_years <- copy(rbindlist(df_list, fill = TRUE))
+# head(df_all_years)
+
+# exploration box
+# df_all_years[!is.na(date) & is.na(report_date), ]
+# df_all_years[, .N]
+# 
+# df_all_years[is.na(vehicle), .N]
+
+####################################################################################v
+
+# drop incident_id column - only present in 1 month (5k out of 517k total rows)
+df_all_years[, incident_id := NULL] 
+
+# drop vehicle column (80k nulls, individual vehicle registrations so very granular)
+df_all_years[, vehicle := NULL] 
+
+# cast delay and gap to min_delay and min_gap where the latter is null
+df_all_years[!is.na(delay) & is.na(min_delay), min_delay := delay]
+df_all_years[!is.na(gap) & is.na(min_gap), min_gap := gap]
+# drop delay and gap columns
+df_all_years[, delay := NULL] 
+df_all_years[, gap := NULL] 
+
+# cast line to route, drop line
+df_all_years[!is.na(line) & is.na(route), route := line]
+df_all_years[, line := NULL] 
+
+# cast bound to direction, drop bound
+df_all_years[!is.na(bound) & is.na(direction), direction := bound]
+df_all_years[, bound := NULL] 
+
+# cast date to report_date, drop date
+df_all_years[!is.na(date) & is.na(report_date), report_date := date]
+df_all_years[, date := NULL] 
+
+# drop remaining rows with NA (~17.5k rows)
+df_all_years <- df_all_years[complete.cases(df_all_years)]
+
+# ~500k remaining rows
+df_all_years[, .N]
+
+# save to RData
+saveRDS(df_all_years, file = '../inputs/bus-clean.RDS')
+```
+
+
+# rough work below
 ```{r}
 df_list[[1]][, month(`Report Date`)]
 

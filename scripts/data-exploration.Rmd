@@ -1,0 +1,45 @@
+---
+title: "data-exploration"
+output: html_document
+date: '2022-04-07'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(data.table)
+library(lubridate)
+```
+
+# Load data
+```{r}
+df <- readRDS('../inputs/bus-clean.RDS')
+
+head(df)
+```
+
+# Summary stats
+## Delay over time
+```{r}
+df[, month_year := format(as.Date(df$report_date), "%Y-%m")]
+df[incident == 'Diversion', 
+    mean(min_delay), 
+    by=month_year] %>%
+    ggplot(aes(x=month_year, y=V1, group=1)) +
+    geom_line()
+```
+## Delay by day of week
+```{r}
+df[report_date > '2015-01-01', mean(min_delay), by=day] %>%
+    ggplot(aes(x= reorder(day,-V1), y=V1)) + 
+    geom_bar(stat="identity") 
+```
+# Quick modelling
+```{r}
+df2015 <- df[report_date %between% c('2015-01-01', '2015-02-01')]
+df2015
+model <- lm(min_delay ~ day + incident, data = df2015)
+summary(model) # show results
+```
+
