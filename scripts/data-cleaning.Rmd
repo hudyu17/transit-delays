@@ -216,6 +216,23 @@ df_all_years <- copy(rbindlist(df_list, fill = TRUE))
 
 ####################################################################################v
 
+# min delay outliers
+df_all_years[min_delay < 100] %>%
+  ggplot(aes(x=min_delay)) + 
+  geom_histogram()
+
+df_all_years[min_delay > 995 & min_delay < 1000] %>%
+  ggplot(aes(x=min_delay)) + 
+  geom_histogram()
+
+df_all_years[min_delay == 999, .N]
+df_all_years[min_delay == 998, .N]
+
+quantile(df_all_years[, min_delay], prob=c(.25, .5, .75, .9, .98))
+```
+
+
+```{r}
 # drop incident_id column - only present in 1 month (5k out of 517k total rows)
 df_all_years[, incident_id := NULL] 
 
@@ -246,6 +263,10 @@ df_all_years <- df_all_years[complete.cases(df_all_years)]
 
 # ~500k remaining rows
 df_all_years[, .N]
+
+# removing outliers
+# quantile(df_all_years[, min_delay], prob=c(.25, .5, .75, .9, .98, .99, .995))
+df_all_years <- df_all_years[min_delay <= 235]
 
 # save to RData
 saveRDS(df_all_years, file = '../inputs/bus-clean.RDS')
