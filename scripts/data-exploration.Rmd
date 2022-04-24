@@ -12,6 +12,7 @@ library(data.table)
 library(lubridate)
 library(rcompanion)
 library(AICcmodavg)
+library(Rmisc)
 ```
 
 # Load data
@@ -21,14 +22,35 @@ df <- readRDS('../inputs/bus-clean.RDS')
 head(df)
 ```
 
-# Summary stats
+# some more cleaning of the incident type
+```{r}
+incidents <- unique(df[, incident])
+incidents
+
+df[incident %like% "^Late Leaving Garage", incident := "Late Leaving Garage"]
+df[incident %like% "^Road Block", incident := "Road Block"]
+df[incident %like% "^Cleaning", incident := "Cleaning"]
+df[incident %like% "^Late Entering Service", incident := "Late Entering Service"]
+df[incident %like% "^Operations", incident := "Operations"]
+df[incident %like% "^Collision", incident := "Collision"]
+df[incident %like% "^Late Leaving Garage", incident := "Late Leaving Garage"]
+df[incident == "Securitty", incident := "Security"]
+df[incident == "Utilized Off Route", incident := "Diversion"]
+df[incident %in% c("Held By", "Late", "Overhead"), incident := "General Delay"]
+```
+
+
+# Summary stats / data characteristics
 ## Delay over time
 ```{r}
 df[, month_year := format(as.Date(df$report_date), "%Y-%m")]
 
 df[, year := format(as.Date(df$report_date), "%Y")]
 
-incidents <- unique(df[, incident])
+df[, mean(min_delay), by=month_year] %>%
+    ggplot(aes(x=month_year, y=V1, group=1)) +
+    geom_line() 
+
 for (curr_incident in incidents) {
   p <- df[incident == curr_incident, mean(min_delay), by=month_year] %>%
     ggplot(aes(x=month_year, y=V1, group=1)) +
@@ -39,10 +61,13 @@ for (curr_incident in incidents) {
 }
 
 ```
+
+
 ## Delay by day of week
 ```{r}
-df[incident == 'Mechanical', mean(min_delay), by=day] %>%
-    ggplot(aes(x= reorder(day,-V1), y=V1)) + 
+# TODO: reorder by day of week
+df[, mean(min_delay), by=day] %>%
+    ggplot(aes(x= reorder(day,c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')), y=V1)) + 
     geom_bar(stat="identity") 
 ```
 # Quick modelling
@@ -85,7 +110,7 @@ anova(model) # show results
 summary(model)
 plot(model)
 
-two_way_day_incident <- aov(delay_log ~ day + incident, data = df2015)
+two_way_day_incident <- aov(delay_log ~ day + incident, data = df)
 two_way_day_hour <- aov(delay_log ~ day + hour, data = df2015)
 two_way_incident_hour <- aov(delay_log ~ hour + incident, data = df2015)
 
@@ -128,7 +153,49 @@ summary(combine_incident_hour_plus_day)
 TukeyHSD(combine_incident_hour_plus_day)
 ```
 
-# anova for delay over time using month-year
+# plots for results
+```{r}
+sumstats = summarySE(df,
+                measurevar="min_delay",
+                groupvars=c("incident"))
+sumstats
+
+pd = position_dodge(.2)
+
+sumstats %>% ggplot(aes(x=factor(incident), y=min_delay)) + 
+  geom_bar(stat="identity", fill="blue", width=0.8) +
+  geom_errorbar(aes(ymin=min_delay-se, ymax=min_delay+se), width=.2, colour='red') +
+  xlab("Incident") +
+  ylab("Delay (minutes)") + 
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+df %>% ggplot(aes(x = incident, y = min_delay)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+## hour plots
+```{r}
+df %>%
+  ggplot(aes(x=hour, y=min_delay)) + 
+  # geom_errorbar(aes(ymin=min_delay-se, ymax=min_delay+se), width=.2, colour='red') +
+  stat_summary(fun.y = "mean", geom = "bar")
+
+
+df %>% ggplot(aes(x = hour, y = min_delay)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+## day plot
+```{r}
+df %>% ggplot(aes(x = day, y = min_delay)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+
+## anova for delay over time using month-year
 ```{r}
 month_year_aov <- aov(delay_log ~ month_year, data = df)
 summary(month_year_aov)
@@ -140,13 +207,61 @@ df[, mean(min_delay), by=month_year] %>%
 year_aov <- aov(delay_log ~ year, data = df)
 summary(year_aov)
 
-year_model <- lm(min_delay ~ year, data = df)
+year_model <- lm(V1 ~ as.numeric(year), data = df[, mean(min_delay), by=year])
 summary(year_model)
+
 
 df[, mean(min_delay), by=year] %>%
     ggplot(aes(x=year, y=V1, group=1)) +
+    geom_line() + 
+    geom_smooth(method='lm', formula= y~x)
+
+df[incident=='Mechanical', mean(min_delay), by=year] %>%
+    ggplot(aes(x=year, y=V1, group=1)) +
+    geom_line() + 
+    geom_smooth(method='lm', formula= y~x)
+
+df[incident=='Cleaning', mean(min_delay), by=year] %>%
+    ggplot(aes(x=year, y=V1, group=1)) +
+    geom_line() +
+    geom_smooth(method='lm', formula= y~x)
+
+
+# show some were flat e.g. late leaving garage flat until 2021
+year_aov_llg <- aov(delay_log ~ year, data = df[incident=='Late Leaving Garage' & year != 2021])
+summary(year_aov_llg)
+
+df[incident=='Late Leaving Garage' & year != 2021] %>% ggplot(aes(x = year, y = min_delay)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+df[incident=='Late Leaving Garage', mean(min_delay), by=year] %>%
+    ggplot(aes(x=year, y=V1, group=1)) +
     geom_line() 
+
+TukeyHSD(year_aov_llg)
 ```
+
+## worst routes
+```{r}
+df[, mean(min_delay), by=route][order(-V1)][1:100]
+
+# worst delayed
+df[, mean(min_delay), by=route][order(-V1)][1:25] %>%
+    ggplot(aes(x= reorder(route,-V1), y=V1)) + 
+    geom_bar(stat="identity") # are these night buses?
+
+# least delayed
+df[, mean(min_delay), by=route][order(V1)][1:30] %>%
+    ggplot(aes(x= reorder(route,V1), y=V1)) + 
+    geom_bar(stat="identity") # are these night buses?
+
+df[, mean(min_delay), by=route] %>%
+    ggplot(aes(x= reorder(route,-V1), y=V1)) + 
+    geom_bar(stat="identity") 
+```
+
+
 
 
 # rough work below

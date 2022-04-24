@@ -1,10 +1,10 @@
 ---
-title: "TTC delay times are not random"
+title: "TTC bus delay times are not random"
 subtitle: "How long you wait depends on where you are, what route you take, and when you take it"
 author: 
   - Hudson Yuen
 date: "`r format(Sys.time(), '%d %B %Y')`"
-abstract: "Despite ranking amongst North America’s best transit systems, the Toronto Transit Commission (TTC) is often derided for irritating delays and service interruptions. This report examines TTC bus, subway, and streetcar delay data, aiming to identify the factors influencing such delays and how improvements can be made. Certain incident types and days of service see disproportionately long delays, creating opportunities to address the most unpleasant aspects of the rider experience in a targeted manner. Doing so will not only strengthen the city’s ability to move people, but to also facilitate sustainable development. **Keywords:** public transit, transit efficiency, urban mobility, sustainble transportation, transportation equity"
+abstract: "Despite ranking amongst North America’s best transit systems, the TTC is often derided for irritating delays and service interruptions. This report examines TTC bus delay data, aiming to identify the factors influencing such delays and how improvements can be made. Certain incident types and days of service see disproportionately long delays, creating opportunities to address the most unpleasant aspects of the rider experience in a targeted manner. Doing so will not only strengthen the city’s ability to move people, but to also facilitate sustainable development. **Keywords:** public transit, transit efficiency, urban mobility, sustainble transportation, transportation equity"
 output:
   bookdown::pdf_document2
 toc: TRUE
@@ -13,7 +13,7 @@ fig_caption: yes
 bibliography: references.bib
 ---
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 library(knitr)
 library(janitor)
 library(lubridate)
@@ -22,7 +22,12 @@ library(tidyverse)
 library(tidyr)
 library(data.table)
 library(dplyr)
+library(gridExtra)
 # library(kableExtra)
+
+library(rcompanion)
+library(AICcmodavg)
+library(Rmisc)
 ```
 \newpage
 
@@ -31,12 +36,32 @@ A strong transit system is critical to the vitality and sustainability of urban 
 
 As the TTC breaks ground on ambitious projects like the Ontario Relief Line [@citeOL], there remains plenty of opportunity to improve how existing services are run. Understanding the causes behind the most severe transit delays can help address issues in a targeted manner, relieving stress throughout the system. While some delays are implemented by design, such as weekend diversions to facilitate larger construction operations, the TTC should seek to mitigate their negative effects.  
 
-The future competitiveness and environmental sustainability of Toronto is intrinsically tied to the strength of the TTC. An inadequate transit system will hamstring growth and opportunity, both on individual scales and beyond [@citeTransit]. Understanding where delays are the most severe can not only help address current limitations, but also aid prediction and prevention of future bottlenecks as projects like the Ontario Line begin construction through the downtown core. 
+The future competitiveness and environmental sustainability of Toronto is intrinsically tied to the strength of the TTC. An inadequate transit system will hamstring growth and opportunity, both on individual scales and beyond [@citeTransit]. Buses will remain a critical aspect of our transit network due to their relatively low cost of implementation and high operational flexibility, especially in the sprawling Greater Toronto Area. Understanding where delays are the most severe can not only help address current limitations, but also aid prediction and prevention of future bottlenecks as projects like the Ontario Line begin construction through the downtown core. 
 
 The remainder of this paper is structured as follows: Section \@ref(data) covers the data source and analysis methodology employed. Section \@ref(model) contains the statistical models used to derive the findings in this paper, with section \@ref(results) covering the results. Section \@ref(discussion) then examines key dimensions of the data, proposing conclusions and areas of further exploration. 
 
 \newpage
 # Data
+```{r}
+df <- readRDS('../inputs/bus-clean.RDS')
+
+df[, month_year := format(as.Date(df$report_date), "%Y-%m")]
+
+df[, year := format(as.Date(df$report_date), "%Y")]
+
+incidents <- unique(df[, incident])
+df[incident %like% "^Late Leaving Garage", incident := "Late Leaving Garage"]
+df[incident %like% "^Road Block", incident := "Road Block"]
+df[incident %like% "^Cleaning", incident := "Cleaning"]
+df[incident %like% "^Late Entering Service", incident := "Late Entering Service"]
+df[incident %like% "^Operations", incident := "Operations"]
+df[incident %like% "^Collision", incident := "Collision"]
+df[incident %like% "^Late Leaving Garage", incident := "Late Leaving Garage"]
+df[incident == "Securitty", incident := "Security"]
+df[incident == "Utilized Off Route", incident := "Diversion"]
+df[incident %in% c("Held By", "Late", "Overhead"), incident := "General Delay"]
+```
+
 
 ## Data Source
 This report examines TTC delay data from 2014 to 2021 across bus, subway, and streetcar services. This data was obtained from 3 separate datasets provided to the public through the City of Toronto Open Data Portal...
@@ -47,9 +72,119 @@ This report examines TTC delay data from 2014 to 2021 across bus, subway, and st
 ## Data Processing
 
 ## Data Characteristics
+```{r, fig.cap="Delay behaviour over time", out.width="70%", fig.align='center'}
+df[, mean(min_delay), by=month_year] %>%
+    ggplot(aes(x=month_year, y=V1, group=1)) +
+    geom_line() + 
+    ylab("Average monthly delay (minutes)") + 
+    xlab("Time (2014-2021)") +
+    ggtitle("Bus delay duration over time") + 
+    theme_minimal() + 
+    theme(  
+      axis.text.x = element_blank(),
+      axis.ticks = element_blank(),
+      panel.grid.major = element_blank()
+    )
+```
+
+```{r, fig.cap="Delay behaviour by day of week", out.width="90%", fig.align='center'}
+df_day <- copy(df[, mean(min_delay), by=day])
+df_day$day <- factor(df_day$day, levels = c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'))
+
+p_day_duration <- df_day %>%
+    ggplot(aes(x=day, y=V1)) + 
+    geom_bar(stat="identity", width=0.7) +
+    ylab("Average daily delay (minutes)") + 
+    xlab("Day") +
+    ggtitle("Delay duration") + 
+    theme_minimal() + 
+    theme(  
+      axis.title.x = element_blank(),
+      axis.text.x = element_text(angle=90, hjust=1)
+    )
+
+df_day_count <- copy(df[, .N, by=day])
+df_day_count$day <- factor(df_day$day, levels = c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'))
+
+p_day_count <- df_day_count %>%
+  ggplot(aes(x = day, y = N)) + 
+	geom_bar(stat = 'identity', width=0.7) + 
+  ylab("Count") + 
+  ggtitle("Number of delays") + 
+	theme_minimal() + 
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle=90, hjust=1)
+  )
+
+grid.arrange(p_day_duration, p_day_count, nrow = 1)
+```
+```{r, fig.cap="Delay behaviour by incident type", out.width="90%", fig.align='center'}
+p_incident_duration <- df[, mean(min_delay), by=incident] %>%
+    ggplot(aes(x=reorder(incident, -V1), y=V1)) + 
+    geom_bar(stat="identity", width=0.7) + 
+    xlab("Incident") +
+    ylab("Average delay (minutes)") + 
+    ggtitle("Delay duration") + 
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle=90, hjust=1))
+
+p_incident_count <- df[,.(count = .N), by = incident] %>%
+  ggplot(aes(x = reorder(incident,(-count)), y = count)) + 
+	geom_bar(stat = 'identity', width=0.7) + 
+  xlab("Incident") +
+  ylab("Count") + 
+  ggtitle("Number of delays") + 
+	theme_minimal() + 
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+grid.arrange(p_incident_duration, p_incident_count, nrow = 1)
+```
 
 \newpage
 # Model
+
+## Goals
+
+## ANOVA
+
+### Data Transformation
+```{r, fig.cap="Histogram of delay durations", out.width="70%", fig.align='center'}
+df %>%
+  ggplot(aes(x=min_delay)) + 
+  geom_histogram(bins=50) + 
+  ylab("Count") + 
+  xlab("Delay duration") +
+  ggtitle("Count of delays by duration") + 
+	theme_minimal() +
+  theme(
+    axis.ticks.y = element_blank()
+  )
+```
+```{r histogram, fig.cap="Histogram of delays after log transformation", out.width="70%", fig.align='center'}
+delay <- df[, min_delay]
+delay_log = log(delay)
+delay_log <- delay_log[!is.infinite(delay_log)]
+plotNormalHistogram(delay_log)
+
+df[, delay_log := log(min_delay)]
+df <- df[!is.infinite(delay_log)]
+```
+
+
+### Model and Feature Selection
+```{r}
+df[, hour := substr(time, 1, 2)] # keep as character because categorical
+
+
+```
+
+
+### Post-hoc Tests
+
+### Follow up: Trends Over Time
+
+## Limitations
 
 \newpage
 # Results
