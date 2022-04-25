@@ -176,7 +176,8 @@ df <- df[!is.infinite(delay_log)]
 ```{r}
 df[, hour := substr(time, 1, 2)] # keep as character because categorical
 
-
+aic <- readRDS('../inputs/aic-table.RDS')
+aic
 ```
 
 

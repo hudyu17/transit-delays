@@ -105,22 +105,25 @@ head(df)
 df2015 <- df[report_date %between% c('2015-01-01', '2015-12-31')]
 length(unique(df2015[, route]))
 
-model <- lm(delay_log ~ day + incident + hour, data = df2015) # TODO: use hour as variable but can't figure it out above lol
+length(df[, day])
+length(df[, delay_log])
+
+model <- lm(delay_log ~ day + incident + hour, data = df2015) 
 anova(model) # show results
 summary(model)
 plot(model)
 
-two_way_day_incident <- aov(delay_log ~ day + incident, data = df)
-two_way_day_hour <- aov(delay_log ~ day + hour, data = df2015)
-two_way_incident_hour <- aov(delay_log ~ hour + incident, data = df2015)
+two_way_day_incident <- aov(delay_log ~ day + incident, data = df) 
+two_way_day_hour <- aov(delay_log ~ day + hour, data = df)
+two_way_incident_hour <- aov(delay_log ~ hour + incident, data = df)
 
-interaction_day_incident <- aov(delay_log ~ day * incident, data = df2015)
-interaction_day_hour <- aov(delay_log ~ day * hour, data = df2015)
-interaction_incident_hour <- aov(delay_log ~ hour * incident, data = df2015)
+interaction_day_incident <- aov(delay_log ~ day * incident, data = df)
+interaction_day_hour <- aov(delay_log ~ day * hour, data = df)
+interaction_incident_hour <- aov(delay_log ~ hour * incident, data = df)
 
-combine_day_incident_plus_hour <- aov(delay_log ~ day * incident + hour, data = df2015)
-combine_incident_hour_plus_day <- aov(delay_log ~ day + incident * hour, data = df2015)
-combine_day_hour_plus_incident <- aov(delay_log ~ day * hour + incident, data = df2015)
+combine_day_incident_plus_hour <- aov(delay_log ~ day * incident + hour, data = df)
+combine_incident_hour_plus_day <- aov(delay_log ~ day + incident * hour, data = df)
+combine_day_hour_plus_incident <- aov(delay_log ~ day * hour + incident, data = df)
 
 model.set <- list(
   two_way_day_incident, 
@@ -146,7 +149,10 @@ model.names <- c(
   'combine_day_hour_plus_incident'
 )
 
-aictab(model.set, modnames = model.names)
+aic_table <- aictab(model.set, modnames = model.names)
+aic_table <- data.table(aic_table)
+
+saveRDS(aic_table, file = '../inputs/aic-table.RDS')
 ```
 ```{r}
 summary(combine_incident_hour_plus_day)
