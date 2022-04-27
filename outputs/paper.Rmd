@@ -384,5 +384,10 @@ The duration of bus delays are heavily influenced by the type of incident that o
 
 Going forward, more granular analysis on incident types and poorly performing routes will help determine specific areas to target and inform subsequent strategies. The lack of location-based analysis is a current weakness, for example, but such detail can greatly strengthen the sweeping findings of this initial analysis. The TTC has an opportunity to use such data to address past deficiencies before ridership resumes to pre-pandemic levels, creating a stronger and more resilient city for the future.
 
+
+## Enhancements
+
+An additional datasheet was prepard for the dataset used in this analysis [(link here)](https://github.com/hudyu17/transit-delays/blob/main/outputs/Datasheet%20-%20TTC_Bus_Delays.pdf)
+
 \newpage
 # References
