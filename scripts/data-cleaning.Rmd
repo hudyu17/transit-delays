@@ -55,18 +55,11 @@ for (i in 1:length(file_list)) {
   
   df_list[[i]] <- df_year
 }
-# 
-# filename <- "../inputs/data/bus/ttc-bus-delay-data-2014.xlsx"
-# sheetnames <- getSheetNames(filename)
-# for(i in 1:length(sheetnames)) {
-#   print(sheetnames[i])
-#   df <- read(excel)
-# }
-# bus_2014 <- read_excel("../inputs/data/bus/ttc-bus-delay-data-2014.xlsx", 1)
-# 
-# df <- data.table(bus_2014)
-# head(df)
+
 ```
+
+# EXPLORATORY CLEANING - DO NOT NEED TO RUN
+Skip ahead to **FINAL CLEANING CHUNK** 
 
 #### Checking NAs
 ```{r}
@@ -203,7 +196,6 @@ df_all_years[
 # delay times are slightly increasing actually - this is surprising
 # segment growth by routes?
 ```
-#### Saving to RData
 ```{r}
 df_all_years <- copy(rbindlist(df_list, fill = TRUE))
 # head(df_all_years)
@@ -231,7 +223,7 @@ df_all_years[min_delay == 998, .N]
 quantile(df_all_years[, min_delay], prob=c(.25, .5, .75, .9, .98))
 ```
 
-
+# FINAL CLEANING CHUNK
 ```{r}
 # drop incident_id column - only present in 1 month (5k out of 517k total rows)
 df_all_years[, incident_id := NULL] 
@@ -273,7 +265,7 @@ saveRDS(df_all_years, file = '../inputs/bus-clean.RDS')
 ```
 
 
-# rough work below
+# rough work below - no need to run
 ```{r}
 df_list[[1]][, month(`Report Date`)]
 
