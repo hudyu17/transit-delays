@@ -11,9 +11,11 @@ toc: TRUE
 thanks: "All data and scripts available at https://github.com/hudyu17/transit-delays"
 fig_caption: yes
 bibliography: references.bib
+header-includes: 
+- \usepackage{float}
 ---
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.pos='H')
 library(knitr)
 library(janitor)
 library(lubridate)
@@ -23,7 +25,7 @@ library(tidyr)
 library(data.table)
 library(dplyr)
 library(gridExtra)
-# library(kableExtra)
+library(kableExtra)
 
 library(rcompanion)
 library(AICcmodavg)
@@ -64,21 +66,39 @@ df[incident %in% c("Held By", "Late", "Overhead"), incident := "General Delay"]
 
 
 ## Data Source
-This report examines TTC delay data from 2014 to 2021 across bus, subway, and streetcar services. This data was obtained from 3 separate datasets provided to the public through the City of Toronto Open Data Portal...
+This report examines TTC bus delay data from 2014 to 2021. This dataset was obtained from the City of Toronto Open Data Portal, available to the public on an ongoing basis since 2014. The data is refreshed monthly and was last updated in April 2022; however, this report only analyses data up until the end of 2021 for the sake of having complete annual data. The R package `opendatatoronto` [@citeTor] was used to obtain all relevant data.
 
 ## Methodology and Data Collection
-`R` [@citeR] was the language and environment used for the bulk of this analysis
+The data collection methodology of original dataset is not fully clear from the source, and does not currently have a data quality score. Most features are of an automated nature and take advantage of the bus fleet’s innate location-tracking capabilities, yet the nature of each delay - the “incident” feature - relies on self-reporting. Some data fields are empty or miscast as a result, necessitating data cleaning before detailed analysis. 
+
+Each delay event is associated with the following features: date, route, time, day (of week), location of the causal incident, delay duration from regular schedule in minutes, direction of bus route, and vehicle identification number. 
+
+`R` [@citeR] was the language and environment used for the bulk of this analysis, alongside the `tidyverse` [@citeTidy], `janitor` [@citeJanitor], `kableExtra` [@citeKableExtra], `dplyr` [@citeDplyr], `AICcmodavg` [@citeAIC], `Rmisc` [@citeRmisc], and `data.table` [@citeDT] packages.
 
 ## Data Processing
+The workflow begins with the `data-download.Rmd` script; data from each year was downloaded using the `opendatatoronto` package. The `data-cleaning.Rmd` script was then used to join each year’s data into a single unified dataset, before removing anomalies to prepare the dataset for further analysis. This comprised the following steps:
+
+- Renaming columns using `janitor` for consistency e.g. “Min Delay” to “min_delay”
+- Recasting the time field from a string to a time type
+- Dropping columns with limited data e.g. `incident_id` only had values for 5k/517k total rows
+- Coalescing equivalent but differently-named columns e.g. `delay` and `min_delay`
+- Dropping remaining rows with N/A values - 17.5k/517k total rows
+- Removing rows with delay durations beyond the 99th percentile (235 minutes); those beyond were deemed outliers that had little interpretable business benefit
+
+The resulting dataset was saved as `bus-clean.RDS` in the `inputs` directory, allowing it to be quickly loaded into other scripts with ease. This dataset was then brought into the `data-exploration.Rmd` script for exploratory analysis, creating the initial plots seen below. 
+
 
 ## Data Characteristics
-```{r, fig.cap="Delay behaviour over time", out.width="70%", fig.align='center'}
+
+Exploratory analysis revealed a potentially concerning trend; the average duration of delays appear to be steadily increasing since 2014, despite what seems like a downward trend in the number of delays. The downward trend in count also needs to be considered in the context of COVID, when delays would have decreased alongside the significant drop in ridership. 
+
+```{r, fig.cap="Delay duration over time", out.width="70%", fig.align='center'}
 df[, mean(min_delay), by=month_year] %>%
     ggplot(aes(x=month_year, y=V1, group=1)) +
     geom_line() + 
     ylab("Average monthly delay (minutes)") + 
     xlab("Time (2014-2021)") +
-    ggtitle("Bus delay duration over time") + 
+    ggtitle("Delay duration over time") + 
     theme_minimal() + 
     theme(  
       axis.text.x = element_blank(),
@@ -87,7 +107,27 @@ df[, mean(min_delay), by=month_year] %>%
     )
 ```
 
-```{r, fig.cap="Delay behaviour by day of week", out.width="90%", fig.align='center'}
+```{r, fig.cap="Number of delays over time", out.width="70%", fig.align='center'}
+df_month_count <- copy(df[, .N, by=month_year])
+df_month_count %>%
+  ggplot(aes(x = month_year, y = N)) + 
+	geom_bar(stat = 'identity', width=0.7) + 
+  ylab("Count") + 
+  xlab("Time (2014-2021)") +
+  ggtitle("Number of delays over time") + 
+  theme_minimal() + 
+  theme(  
+    axis.text.x = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank()
+  )
+```
+
+
+Segmenting the data by day also revealed interesting differences in delay duration. Perhaps similar to general trends, delay duration appears to be higher on the weekends despite fewer delays happening in the first place. 
+
+
+```{r, fig.cap="Delay behaviour by day of week", out.width="80%", fig.align='center'}
 df_day <- copy(df[, mean(min_delay), by=day])
 df_day$day <- factor(df_day$day, levels = c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'))
 
@@ -119,7 +159,11 @@ p_day_count <- df_day_count %>%
 
 grid.arrange(p_day_duration, p_day_count, nrow = 1)
 ```
-```{r, fig.cap="Delay behaviour by incident type", out.width="90%", fig.align='center'}
+
+Finally, there are clearly incidents that occur more often, whilst others occur with much greater severity. For example, road blocks result in delays of over 50 minutes on average, but mechanical incidents happen with much more frequency. 
+
+
+```{r, fig.cap="Delay behaviour by incident type", out.width="80%", fig.align='center'}
 p_incident_duration <- df[, mean(min_delay), by=incident] %>%
     ggplot(aes(x=reorder(incident, -V1), y=V1)) + 
     geom_bar(stat="identity", width=0.7) + 
@@ -142,14 +186,37 @@ grid.arrange(p_incident_duration, p_incident_count, nrow = 1)
 ```
 
 \newpage
+
 # Model
 
 ## Goals
 
+The primary goal behind modelling was to deduce the causal factors behind delays, if any existed, to form the basis for further analysis in exploring how delays could be mitigated. Of the features in the dataset, the most relevant for modelling were: day, incident type, and a time-based metric (such as hour or minute). Location and route data provided valuable geographical context, yet they would be too granular without further aggregation; this grouping was unfortunately difficult to execute, as many locations were manually typed in with inconsistent syntax. This paper does isolate specific “worst-offender” routes for detailed deep-dives into why some routes consistently perform worst than others. 
+
 ## ANOVA
 
+I set out to fit a model that best predicted delay duration based on some combination of these selected features. It was prudent to also determine whether these features had a true effect on delay duration; both these goals were achieved by fitting multiple ANOVAs and evaluating them based on a measure of prediction error, such as AIC. Although not exhaustive, 9 potential models were fitted to evaluate factors that influenced delay duration:
+
+- The two-way impact of day, incident type, and hour = 3 models (a two-way ANOVA also examines the impact of individual variables)
+    
+  $Y_1 = \mu + \beta_0 + \beta_1$
+    
+- The interactions between 2 variables = 3 models
+    
+  $Y_1 = \mu + \beta_0 * \beta_1$
+    
+- The aforementioned interactions with the additive impact of the remaining feature = 3 models
+    
+  $Y_1 = \mu + \beta_0 * \beta_1 + \beta_2$
+    
+
+An ANOVA (Analysis of Variance) test evaluates whether certain features cause statistically significant - as opposed to random - differences between the means of more than 2 groups. This is done by examining the ratio of variance between groups to variance within groups; if this ratio is high, then it is more likely that there are true differences between groups.
+
 ### Data Transformation
-```{r, fig.cap="Histogram of delay durations", out.width="70%", fig.align='center'}
+
+ANOVA tests assume that the data is normally distributed and homoscedastic, requiring further cleaning of the original data. The original distribution can be seen below and is heavily skewed right; a log transformation was applied, resulting in a more normal distribution. 
+
+```{r, fig.cap="Histogram of delay durations", out.width="50%", fig.align='center'}
 df %>%
   ggplot(aes(x=min_delay)) + 
   geom_histogram(bins=50) + 
@@ -161,7 +228,8 @@ df %>%
     axis.ticks.y = element_blank()
   )
 ```
-```{r histogram, fig.cap="Histogram of delays after log transformation", out.width="70%", fig.align='center'}
+
+```{r histogram, fig.cap="Histogram of delays after log transformation", out.width="50%", fig.align='center'}
 delay <- df[, min_delay]
 delay_log = log(delay)
 delay_log <- delay_log[!is.infinite(delay_log)]
@@ -173,28 +241,148 @@ df <- df[!is.infinite(delay_log)]
 
 
 ### Model and Feature Selection
+
+The Akaike information criterion (AIC) was used to evaluate the quality of all models. This technique calculates a model’s log-likelihood of existing given the provided data, resulting in an interpretable metric where a lower AIC represents a better fitting model. The `Delta_AICc` score shows the difference in AIC between the model in question and the best-fitting model. 
+
+
 ```{r}
 df[, hour := substr(time, 1, 2)] # keep as character because categorical
 
-aic <- readRDS('../inputs/aic-table.RDS')
-aic
+aic <- readRDS('../inputs/aic-table.RDS') # load table so no recalculating on knit
+aic[, -c('Cum.Wt', 'K', 'AICcWt', 'ModelLik')] %>%
+  kable(
+    caption = "AIC scores for model evaluation",
+    linesep = ""
+  ) %>%
+  kable_styling(latex_options = "HOLD_position")
 ```
 
+2 models were close in accuracy; the 2nd place model featured a `Delta_AICc` score of 50, compared to a score of 2288 and 2548 for the 3rd and 4th place models respectively. It was therefore determined that the first 2 models were effectively equal in accuracy, and the decision was made to use `combine_incident_hour_plus_day` as the model of choice; this followed the following:
+
+$delay = day + incident*hour$
 
 ### Post-hoc Tests
 
+With our selected model demonstrating significant differences between groups, further analysis was performed to identify which specific groups differed from each other. The Tukey Honestly Significant Difference test (Tukey’s HSD) was used to compare every possible treatment, a technique that improves upon multiple t-tests through utilising a pooled variance estimate and adjusted confidence intervals for multiple tests.
+
 ### Follow up: Trends Over Time
 
+After examining specific features, I examined whether delays changed significantly from year to year. Exploratory plots revealed a growing trend, so I aggregated delay duration by year and fit a linear regression. 
+
+$delay = \mu + \beta_0X$
+
 ## Limitations
+
+There are several limitations to the modelling approach described above, chiefly regarding the natural distribution of data and preexisting outliers. The most egregious outliers beyond the 99th percentile were eliminated during the cleaning process, but over 37k delays (~7%) were deemed “outliers” beyond the upper IQR. It was difficult to justify removal of these points; when viewed on a histogram they appear to fit the natural distribution of the data. 
+
+The heavily right-skewed nature of the data also created issues for modelling. Despite a log transformation, diagnostic residual plots do not fully exhibit the desired trends. The resulting large log likelihood statistics is an effect of this. 
+
+Despite these shortfalls, I believe that this modelling still reveals key directional insights surrounding the causes of bus delays. For example, the estimated magnitude of impact for a mechanical failure at 11pm may not be accurate in isolation, but the helpful takeaway is that delays are frequently exacerbated at certain times of day. A careful balance should therefore be struck between interpreting model results as specific or more relationship-focused.
 
 \newpage
 # Results
 
+The Tukey HSD test revealed that the following insights regarding significant differences in delay time:
+
+- Days can be categorised into early, mid-week, and weekend; delay duration differs between groups, but less so within groups
+- The `management, investigation, cleaning, and rail/switches` incidents are not a strong indicator of delay duration
+- Delays are similar for certain time brackets; the 8-11pm and 1-4am time frames see similar delay durations in particular
+
+```{r, fig.cap="Average delay duration by hour", out.width="70%", fig.align='center'}
+df %>% ggplot(aes(x = hour, y = min_delay)) +
+  stat_summary(fun.y = "mean", geom = "bar") + 
+  xlab("Hour") +
+  ylab("Average delay duration (minutes)") + 
+  ggtitle("Delay duration by hour") + 
+	theme_minimal() 
+```
+
+Due to the large number of categorical levels across the 3 factors, for example one level for each of the 24 hours, plotting every comparison would be impractical and difficult to interpret. Instead, boxplots of the individual features can be seen below. 
+
+```{r, fig.cap="Delay duration by incident", out.width="70%", fig.align='center'}
+df %>% ggplot(aes(x = incident, y = min_delay)) +
+  geom_boxplot() + 
+  xlab("Incident") +
+  ylab("Delay duration (minutes)") + 
+  ggtitle("Delay duration by incident type") + 
+	theme_minimal() +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+```{r, fig.cap="Delay duration by day of week", out.width="70%", fig.align='center'}
+df %>% ggplot(aes(x = day, y = min_delay)) +
+  geom_boxplot() + 
+  xlab("Incident") +
+  ylab("Delay duration (minutes)") + 
+  ggtitle("Delay duration by day") + 
+	theme_minimal() +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+```{r, fig.cap="Delay duration by hour", out.width="70%", fig.align='center'}
+df %>% ggplot(aes(x = hour, y = min_delay)) +
+  geom_boxplot() + 
+  xlab("Hour") +
+  ylab("Delay duration (minutes)") + 
+  ggtitle("Delay duration by hour") + 
+	theme_minimal() +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+The followup linear model showing delay duration over time can be seen below, with further splits by certain notable incident types. 
+
+```{r, fig.cap="Delay duration over time", out.width="70%", fig.align='center'}
+year_model <- lm(V1 ~ as.numeric(year), data = df[, mean(min_delay), by=year])
+# summary(year_model)
+
+df[, mean(min_delay), by=year] %>%
+    ggplot(aes(x=year, y=V1, group=1)) +
+    geom_line() + 
+    xlab("Year") +
+    ylab("Average delay duration (minutes)") + 
+    ggtitle("Delay duration over time") + 
+  	theme_minimal() +
+    geom_smooth(method='lm', formula= y~x)
+```
+
+The 2 worst-performing routes see average delay durations over 50% worse than the next most delayed routes. Of the top 30 longest delayed routes, 26 are night buses (route numbers in the -300 range). 
+
+```{r, fig.cap="Most severely delayed routes", out.width="70%", fig.align='center'}
+df[, mean(min_delay), by=route][order(-V1)][1:25] %>%
+    ggplot(aes(x= reorder(route,-V1), y=V1)) + 
+    geom_bar(stat="identity") + 
+    xlab("Route number") +
+    ylab("Average delay duration (minutes)") + 
+    ggtitle("Routes with the longest average delay") + 
+  	theme_minimal()
+```
+
+
 \newpage
 # Discussion
 
+## The impacts of incident, hour, and day
+
+The effectiveness of the incident:hour interaction suggests that these features compound on each other to exacerbate the duration of delays. For example, a mechanical incident at 3am is expected to be considerably worse than at 10am. This conclusion is unsurprising, but the modelling appears to reveal 2 windows - one late at night and the other early in the morning - that see much longer delays. It is likely that there are fewer resources and staff to handle delays during the entire night window, so these spikes could be a result of increased ridership placing undue pressure on the network; the 10pm rush may correspond with riders returning home before the final subway service runs for the night, and the 2am window with late-night revellers finally making the trip home. Given the unpleasant and potentially dangerous nature of having riders wait through extended delays at night, this presents an opportunity for the TTC to decrease delay times with potentially outsized returns in rider satisfaction and safety. 
+
+The day of the week also influences delay duration, with delays on the weekend seeing significantly longer durations. As mentioned in the model limitations, the specific magnitude of this influence is difficult to ascertain, but it is clear that weekends are a worse time to be stuck on a bus route. However, this interaction is likely by design; the TTC regularly schedules route diversions and upgrade works to occur on the weekend to avoid severe disruptions to general work schedules. This feature may therefore not reveal a particular opportunity for improvement; rather, it only serves to quantify the worsened weekend experience felt by many. 
+
+## Delays are not getting shorter
+
+Perhaps more concerning is how delay duration appears to be flat or increasing since 2014, despite continued public concern and greater recognition of the need for effective transit. This would not be as pressing an issue if TTC bus service had expanded accordingly, but service has remained largely equal from a frequency and coverage standpoint. 
+
+The reliability of night buses is also an area worthy of closer examination, given that the longest delays by far are found on these routes. It is unlikely that the nature of operating at night results in greater exposure to the severe incidents of a mechanical or diversion nature, suggesting that long delays are a result of an inadequate delay response. 
+
+## Weaknesses
+
+The quality of the dataset was a key blocker in carrying out a more rigorous analysis, resulting in limitations outlined earlier with regards to model accuracy. However, a structural limitation to this analysis is the limited feature set in the original dataset. The features included in the model were - unsurprisingly - the only features that could be aggregated or generalised: incident type, day of week, and datetime-based metrics (of which hour was created). Location-based analysis with route data would have added to the depth of this exploration, yet this would require extensive and potentially futile cleaning of various text fields. 
+
 \newpage
 # Conclusions
+
+The duration of bus delays are heavily influenced by the type of incident that occurs, the day of the week, and the time of day. Night services in particular appear to see the most severe delays, creating an opportunity to drastically improve the quality of bus service offered in a targeted manner. Other immediate findings reveal a delay situation that has generally worsened in severity since 2014, even if the total number of delays may be decreasing. 
+
+Going forward, more granular analysis on incident types and poorly performing routes will help determine specific areas to target and inform subsequent strategies. The lack of location-based analysis is a current weakness, for example, but such detail can greatly strengthen the sweeping findings of this initial analysis. The TTC has an opportunity to use such data to address past deficiencies before ridership resumes to pre-pandemic levels, creating a stronger and more resilient city for the future.
 
 \newpage
 # References

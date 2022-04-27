@@ -156,7 +156,13 @@ saveRDS(aic_table, file = '../inputs/aic-table.RDS')
 ```
 ```{r}
 summary(combine_incident_hour_plus_day)
-TukeyHSD(combine_incident_hour_plus_day)
+tukey_output <- TukeyHSD(combine_incident_hour_plus_day)
+tukey_output <- data.table(tukey_output)
+
+head(tukey_output)
+tukey_output[[1]]
+
+saveRDS(tukey_output[[1]], file = '../inputs/tukey-table.RDS')
 ```
 
 # plots for results
@@ -198,6 +204,12 @@ df %>% ggplot(aes(x = hour, y = min_delay)) +
 df %>% ggplot(aes(x = day, y = min_delay)) +
   geom_boxplot() + 
   theme(axis.text.x = element_text(angle=90, hjust=1))
+
+
+
+out <- boxplot.stats(df$min_delay)$out
+out_ind <- which(df$min_delay %in% c(out))
+df[out_ind, .N] / df[, .N]
 ```
 
 
@@ -260,7 +272,7 @@ df[, mean(min_delay), by=route][order(-V1)][1:25] %>%
 # least delayed
 df[, mean(min_delay), by=route][order(V1)][1:30] %>%
     ggplot(aes(x= reorder(route,V1), y=V1)) + 
-    geom_bar(stat="identity") # are these night buses?
+    geom_bar(stat="identity") 
 
 df[, mean(min_delay), by=route] %>%
     ggplot(aes(x= reorder(route,-V1), y=V1)) + 
