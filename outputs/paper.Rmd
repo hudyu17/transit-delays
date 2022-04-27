@@ -1,6 +1,6 @@
 ---
-title: "TTC bus delay times are not random"
-subtitle: "How long you wait depends on where you are, what route you take, and when you take it"
+title: "TTC bus delays vary considerably based on time of day"
+subtitle: "How long you wait depends on the type of delay, what route you take, and when you take it"
 author: 
   - Hudson Yuen
 date: "`r format(Sys.time(), '%d %B %Y')`"
